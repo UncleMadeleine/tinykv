@@ -16,12 +16,15 @@ package raft
 
 import (
 	"errors"
+	"math/rand"
 	"os"
 	"sync"
 
 	"github.com/pingcap-incubator/tinykv/log"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
 )
+
+const LOG_BOOL int = 0 //决定是否输出日志
 
 // None is a placeholder node ID used when there is no leader.
 const None uint64 = 0
@@ -161,10 +164,11 @@ type Raft struct {
 	// (Used in 3A conf change)
 	PendingConfIndex uint64
 
-	peerArray []uint64
-	mtx       *sync.RWMutex
-	lg        *log.Logger
-	vts       int //得票数
+	peerArray  []uint64
+	mtx        *sync.RWMutex
+	lg         *log.Logger
+	vts        int //得票数
+	eletimeout int //常数，不用随机化
 }
 
 // newRaft return a raft peer with the given config
@@ -188,7 +192,8 @@ func newRaft(c *Config) *Raft {
 		mtx:              &sync.RWMutex{},
 		Term:             0,
 		votes:            make(map[uint64]bool),
-		lg:               Newlg(0), //改动此处决定是否输出日志
+		lg:               Newlg(LOG_BOOL), //改动此处决定是否输出日志
+		eletimeout:       c.ElectionTick,
 		// leadTransferee:   0,
 	}
 	return model
@@ -226,6 +231,7 @@ func (r *Raft) tick() {
 	// Your Code Here (2A).
 	//TODO:2AA
 	r.electionElapsed++
+	r.lg.Debug("tick:", r.electionElapsed)
 	switch r.State {
 	case StateLeader:
 		r.heartbeatElapsed++
@@ -239,22 +245,27 @@ func (r *Raft) tick() {
 			}
 		}
 	case StateCandidate:
-		// r.lg.Debug("time:", r.electionElapsed)
+		r.lg.Debug("time:", r.electionElapsed, " timeout: ", r.electionTimeout)
 		if r.electionElapsed >= r.electionTimeout {
 			r.becomeCandidate()
+			for _, peer := range r.peerArray {
+				if peer == r.id {
+					continue
+				}
+				r.msgs = append(r.msgs, pb.Message{MsgType: pb.MessageType_MsgRequestVote, From: r.id, To: peer, Term: r.Term})
+			}
 		}
-		// var vcnt int = 0
-		// for _, ok := range r.votes {
-		// 	if ok {
-		// 		vcnt++
-		// 	}
-		// }
-		// if vcnt > len(r.peerArray)/2 {
-		// 	r.becomeLeader()
-		// }
 	case StateFollower:
+		r.lg.Debug("time:", r.electionElapsed, " timeout: ", r.electionTimeout)
 		if r.electionElapsed >= r.electionTimeout {
 			r.becomeCandidate()
+			for _, peer := range r.peerArray {
+				if peer == r.id {
+					continue
+				}
+				r.msgs = append(r.msgs, pb.Message{MsgType: pb.MessageType_MsgRequestVote, From: r.id, To: peer, Term: r.Term})
+			}
+			// r.lg.Debug("become Candidate: ", r.State.String())
 		}
 	}
 }
@@ -284,17 +295,12 @@ func (r *Raft) becomeCandidate() {
 	r.votes[r.id] = true
 	r.Vote = r.id
 	r.electionElapsed = 0
+	r.electionTimeout = int((1 + rand.Float64()) * float64(r.eletimeout))
 	r.vts = 1
 	r.heartbeatElapsed = 0
 	if len(r.peerArray) == 1 {
 		r.becomeLeader()
 		return
-	}
-	for _, peer := range r.peerArray {
-		if peer == r.id {
-			continue
-		}
-		r.msgs = append(r.msgs, pb.Message{MsgType: pb.MessageType_MsgRequestVote, From: r.id, To: peer, Term: r.Term})
 	}
 }
 
@@ -372,6 +378,7 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 func (r *Raft) handleHeartbeat(m pb.Message) {
 	// Your Code Here (2A).
 	//TODO:2AA
+	r.electionElapsed = int((1 + rand.Float64()) * float64(r.eletimeout))
 	r.electionElapsed = 0
 }
 
@@ -390,6 +397,8 @@ func (r *Raft) handleRequestVoteResponse(m pb.Message) {
 }
 
 func (r *Raft) handleRequstVote(m pb.Message) {
+	r.electionElapsed = 0
+	r.electionTimeout = int((1 + rand.Float64()) * float64(r.eletimeout))
 	if r.Vote == 0 || r.Vote == m.GetFrom() {
 		r.lg.Debugf("%d vote for %d", m.GetTo(), m.GetFrom())
 		r.Vote = m.GetFrom()
