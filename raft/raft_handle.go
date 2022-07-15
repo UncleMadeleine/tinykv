@@ -244,7 +244,7 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 
 	r.lg.Debugf("the %d peer Raftlog is [%v] now", r.id, r.RaftLog.entries)
 
-	//TODO: reply
+	//reply
 
 	r.msgs = append(r.msgs, pb.Message{MsgType: pb.MessageType_MsgAppendResponse, Reject: false,
 		From: r.id, To: m.GetFrom(), Term: r.Term, Index: r.RaftLog.LastIndex()})

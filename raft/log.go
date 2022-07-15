@@ -56,7 +56,6 @@ type RaftLog struct {
 	pendingSnapshot *pb.Snapshot
 
 	// Your Data Here (2A).
-	//TODO:2AB
 	lg *log.Logger
 	// lastIndex uint64
 }
@@ -65,7 +64,6 @@ type RaftLog struct {
 // to the state that it just commits and applies the latest snapshot.
 func newLog(storage Storage) *RaftLog {
 	// Your Code Here (2A).
-	//TODO:2AB
 	firstIndex, err := storage.FirstIndex()
 	if err != nil {
 		panic(err)
@@ -111,7 +109,6 @@ func (l *RaftLog) maybeCompact() {
 // unstableEntries return all the unstable entries
 func (l *RaftLog) unstableEntries() []pb.Entry {
 	// Your Code Here (2A).
-	//TODO:2AB
 	l.lg.Debugf("check unstableEntries")
 	l.lg.Debugf("stabled:%d,lastIndex:%d", l.stabled, l.LastIndex())
 	if l.stabled > l.LastIndex() {
@@ -125,7 +122,7 @@ func (l *RaftLog) unstableEntries() []pb.Entry {
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
-	//TODO:2AB
+
 	l.lg.Debugf("check nextEntries")
 	l.lg.Debugf("the applied is %d, and the commited is %d", l.applied, l.committed)
 	if l.committed == l.applied {
@@ -137,7 +134,7 @@ func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 // LastIndex return the last index of the log entries
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
-	//TODO:2AB
+
 	// l.lg.Debugf("check lastIndex:%d", len(l.entries))
 	if len(l.entries) == 0 {
 		return 0
@@ -155,7 +152,7 @@ func (l *RaftLog) LastLogTerm() uint64 {
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
-	//TODO:2AB
+
 	l.lg.Debugf("return Term %d", i)
 	if i <= 0 {
 		term, err := l.storage.Term(i)
