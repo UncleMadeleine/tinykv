@@ -16,7 +16,6 @@ package raft
 
 import (
 	"errors"
-	"os"
 
 	"github.com/pingcap-incubator/tinykv/log"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
@@ -78,25 +77,17 @@ func newLog(storage Storage) *RaftLog {
 	if err != nil {
 		panic(err)
 	}
+
+	hardState, _, _ := storage.InitialState()
+
 	model := &RaftLog{
-		storage: storage,
-		entries: ent,
-		stabled: lastIndex,
-		lg:      NewStoragelg(LOG_BOOL), //改动此处决定是否输出日志
+		storage:   storage,
+		entries:   ent,
+		stabled:   lastIndex,
+		committed: hardState.Commit,
+		lg:        Newlg("Storage"), //改动此处决定是否输出日志
 	}
 	return model
-}
-
-func NewStoragelg(st int) *log.Logger {
-	writer2 := os.Stdout
-	if st == 0 {
-		writer2 = nil
-	}
-	w := log.NewLogger(writer2, "Storage:")
-
-	w.SetLevel(log.LOG_LEVEL_DEBUG)
-	w.SetHighlighting(true)
-	return w
 }
 
 // We need to compact the log entries in some point of time like
@@ -118,6 +109,18 @@ func (l *RaftLog) unstableEntries() []pb.Entry {
 	res := l.entries[l.stabled:]
 	return res
 }
+
+// func (l *RaftLog) stableEntries() []pb.Entry {
+// 	//2AC
+// 	res := l.entries[:l.stabled]
+// 	return res
+// }
+
+// func (l *RaftLog) committedEntries() []pb.Entry {
+// 	//2AC
+// 	res := l.entries[:l.committed]
+// 	return res
+// }
 
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {

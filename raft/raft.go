@@ -24,7 +24,12 @@ import (
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
 )
 
-const LOG_BOOL int = 0 //决定是否输出日志
+//logBoolMap 决定是否输出日志
+var logBoolMap = map[string]bool{
+	"Raft":    false,
+	"Storage": false,
+	"RawNode": false,
+}
 
 // None is a placeholder node ID used when there is no leader.
 const None uint64 = 0
@@ -198,7 +203,7 @@ func newRaft(c *Config) *Raft {
 		mtx:              &sync.RWMutex{},
 		votes:            make(map[uint64]bool),
 		Vote:             hardState.Vote,
-		lg:               Newlg(LOG_BOOL), //改动此处决定是否输出日志
+		lg:               Newlg("Raft"), //改动此处决定是否输出日志
 		eletimeout:       c.ElectionTick,
 		Term:             hardState.Term,
 		// leadTransferee:   0,
@@ -216,12 +221,13 @@ func newRaft(c *Config) *Raft {
 	return model
 }
 
-func Newlg(st int) *log.Logger {
+func Newlg(st string) *log.Logger {
 	writer2 := os.Stdout
-	if st == 0 {
+	flag := logBoolMap[st]
+	if !flag {
 		writer2 = nil
 	}
-	w := log.NewLogger(writer2, "Project2A:")
+	w := log.NewLogger(writer2, st)
 
 	w.SetLevel(log.LOG_LEVEL_DEBUG)
 	w.SetHighlighting(true)
@@ -400,7 +406,7 @@ func (r *Raft) becomeLeader() {
 
 }
 
-var allowedMsgMap = map[pb.MessageType]interface{}{
+var localMsgMap = map[pb.MessageType]interface{}{
 	pb.MessageType_MsgHup:  nil,
 	pb.MessageType_MsgBeat: nil,
 	// pb.MessageType_MsgAppendResponse: nil,
@@ -415,7 +421,7 @@ func (r *Raft) Step(m pb.Message) error {
 
 	if r.Term > m.Term {
 		//特判有无可能是local message
-		if _, ok := allowedMsgMap[m.MsgType]; ok != true {
+		if _, ok := localMsgMap[m.MsgType]; ok != true {
 			r.lg.Debugf("ignore:r.term > m.term, msgType: %s", m.MsgType)
 			return nil
 		}
