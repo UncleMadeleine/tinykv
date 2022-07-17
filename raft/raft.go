@@ -242,6 +242,12 @@ func (r *Raft) sendAppend(to uint64) bool {
 
 	preIndex := r.Prs[to].Next - 1
 
+	if !IsEmptySnap(r.RaftLog.pendingSnapshot) && preIndex < r.RaftLog.firstIndex {
+		r.lg.Debugf("turn to send snap")
+		r.sendSnap(to)
+		return true
+	}
+
 	//TODO:需判断m.term是否在任期内
 
 	var ents []*pb.Entry
@@ -277,6 +283,11 @@ func (r *Raft) sendHeartbeat(to uint64) {
 	r.msgs = append(r.msgs, pb.Message{MsgType: pb.MessageType_MsgHeartbeat, Term: r.Term,
 		From: r.id, To: to,
 		Commit: r.RaftLog.committed})
+}
+
+func (r *Raft) sendSnap(to uint64) {
+	r.msgs = append(r.msgs, pb.Message{MsgType: pb.MessageType_MsgSnapshot, Snapshot: r.RaftLog.pendingSnapshot,
+		Term: r.Term, To: to, From: r.id})
 }
 
 // tick advances the internal logical clock by a single tick.
@@ -448,6 +459,8 @@ func (r *Raft) Step(m pb.Message) error {
 			r.handleRequstVote(m)
 		case pb.MessageType_MsgPropose:
 			r.handleMsgPropose(m)
+		case pb.MessageType_MsgSnapshot:
+			r.handleSnapshot(m)
 		}
 	case StateCandidate:
 		switch m.MsgType {
@@ -469,6 +482,8 @@ func (r *Raft) Step(m pb.Message) error {
 				r.msgs = append(r.msgs, pb.Message{MsgType: pb.MessageType_MsgRequestVote, From: r.id, To: peer, Term: r.Term, Index: r.RaftLog.LastIndex(),
 					LogTerm: r.RaftLog.LastLogTerm()})
 			}
+		case pb.MessageType_MsgSnapshot:
+			r.handleSnapshot(m)
 		}
 	case StateLeader:
 		switch m.MsgType {
@@ -491,11 +506,6 @@ func (r *Raft) Step(m pb.Message) error {
 
 func (r *Raft) quorum() int {
 	return len(r.peerArray) / 2
-}
-
-// handleSnapshot handle Snapshot RPC request
-func (r *Raft) handleSnapshot(m pb.Message) {
-	// Your Code Here (2C).
 }
 
 // addNode add a new node to raft group

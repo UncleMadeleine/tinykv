@@ -55,8 +55,8 @@ type RaftLog struct {
 	pendingSnapshot *pb.Snapshot
 
 	// Your Data Here (2A).
-	lg *log.Logger
-	// lastIndex uint64
+	lg         *log.Logger
+	firstIndex uint64
 }
 
 // newLog returns log using the given storage. It recovers the log
@@ -81,11 +81,13 @@ func newLog(storage Storage) *RaftLog {
 	hardState, _, _ := storage.InitialState()
 
 	model := &RaftLog{
-		storage:   storage,
-		entries:   ent,
-		stabled:   lastIndex,
-		committed: hardState.Commit,
-		lg:        Newlg("Storage"), //改动此处决定是否输出日志
+		storage:    storage,
+		entries:    ent,
+		stabled:    lastIndex,
+		committed:  hardState.Commit,
+		applied:    firstIndex - 1,
+		firstIndex: firstIndex - 1,
+		lg:         Newlg("Storage"), //改动此处决定是否输出日志
 	}
 	return model
 }
@@ -95,6 +97,8 @@ func newLog(storage Storage) *RaftLog {
 // grow unlimitedly in memory
 func (l *RaftLog) maybeCompact() {
 	// Your Code Here (2C).
+	//TODO:2C
+
 }
 
 // unstableEntries return all the unstable entries
@@ -106,47 +110,45 @@ func (l *RaftLog) unstableEntries() []pb.Entry {
 		l.lg.Debugf("Err!!! The stabled is more than lastIndex")
 		return make([]pb.Entry, 0)
 	}
-	res := l.entries[l.stabled:]
+	res := l.entries[l.stabled-l.firstIndex:]
 	return res
 }
-
-// func (l *RaftLog) stableEntries() []pb.Entry {
-// 	//2AC
-// 	res := l.entries[:l.stabled]
-// 	return res
-// }
-
-// func (l *RaftLog) committedEntries() []pb.Entry {
-// 	//2AC
-// 	res := l.entries[:l.committed]
-// 	return res
-// }
 
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
 
 	l.lg.Debugf("check nextEntries")
-	l.lg.Debugf("the applied is %d, and the commited is %d", l.applied, l.committed)
+	// l.lg.Debugf("the applied is %d, and the commited is %d", l.applied, l.committed)
+	// l.lg.Debugf("firstIndex:%d", l.firstIndex)
+
 	if l.committed == l.applied {
 		return make([]pb.Entry, 0)
 	}
-	return l.entries[l.applied:l.committed]
+	if len(l.entries) == 0 {
+		return make([]pb.Entry, 0)
+	}
+	return l.entries[l.applied-l.firstIndex : l.committed-l.firstIndex]
 }
 
 // LastIndex return the last index of the log entries
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
 
-	// l.lg.Debugf("check lastIndex:%d", len(l.entries))
+	// l.lg.Debugf("check lastIndex")
+	if !IsEmptySnap(l.pendingSnapshot) {
+		return l.pendingSnapshot.Metadata.Index
+	}
 	if len(l.entries) == 0 {
-		return 0
+		l.lg.Debugf("first:%d", l.firstIndex)
+		// return l.pendingSnapshot.Metadata.GetIndex()
+		return l.firstIndex
 	}
 	return l.entries[len(l.entries)-1].GetIndex()
 }
 
 func (l *RaftLog) LastLogTerm() uint64 {
-	if l.LastIndex() > 0 {
+	if l.LastIndex() > l.firstIndex {
 		return l.entries[l.LastIndex()-1].GetTerm()
 	}
 	return 0
@@ -157,10 +159,30 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
 
 	l.lg.Debugf("return Term %d", i)
-	if i <= 0 {
+	if i < l.firstIndex {
 		term, err := l.storage.Term(i)
+		if err == ErrUnavailable && !IsEmptySnap(l.pendingSnapshot) {
+			if i == l.pendingSnapshot.Metadata.Index {
+				term = l.pendingSnapshot.Metadata.Term
+				err = nil
+			} else if i < l.pendingSnapshot.Metadata.Index {
+				err = ErrCompacted
+			}
+		}
 		return term, err
 	}
+
+	// term, err := l.storage.Term(i)
+	// if err == ErrUnavailable && !IsEmptySnap(l.pendingSnapshot) {
+	// 	if i == l.pendingSnapshot.Metadata.Index {
+	// 		term = l.pendingSnapshot.Metadata.Term
+	// 		err = nil
+	// 	} else if i < l.pendingSnapshot.Metadata.Index {
+	// 		err = ErrCompacted
+	// 	}
+	// }
+	// return term, err
+
 	if i <= l.LastIndex() {
 		return l.entries[i-1].Term, nil
 	}
@@ -177,7 +199,7 @@ func (l *RaftLog) maybeCommit(maxIndex, term uint64) bool {
 }
 
 func (l *RaftLog) getEntries(left, right uint64) []pb.Entry {
-	if left < 0 {
+	if left < l.firstIndex {
 		l.lg.Debugf("get entries failed,the left number is %d", left)
 		return make([]pb.Entry, 0)
 	}

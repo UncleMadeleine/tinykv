@@ -43,7 +43,6 @@ func (r *Raft) handleRequestVoteResponse(m pb.Message) {
 func (r *Raft) handleRequstVote(m pb.Message) {
 	r.lg.Debugf("handle request vote")
 	if r.Term > m.Term {
-		//TODO:
 		// r.msgs = append(r.msgs,pb.Message{MsgType: pb.MessageType_MsgRequestVoteResponse, To: m.GetFrom(), From: r.id, Term: m.Term, Reject: true})
 	} else if r.Term < m.Term && r.Term != 0 {
 		r.becomeFollower(m.Term, None)
@@ -196,7 +195,7 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 		}
 
 		if r.RaftLog.LastIndex() > 0 && (r.RaftLog.LastIndex() > preIndex+uint64(len(m.GetEntries())) && r.RaftLog.entries[preIndex+uint64(len(m.GetEntries()))].GetTerm() < m.GetLogTerm()) {
-			r.lg.Debugf("reject 3")
+			// r.lg.Debugf("reject 3")
 			r.msgs = append(r.msgs, pb.Message{MsgType: pb.MessageType_MsgAppendResponse, Reject: true,
 				From: r.id, To: m.GetFrom(), Term: r.Term, Index: preIndex, LogTerm: r.RaftLog.entries[preIndex].GetTerm()})
 			return
@@ -305,5 +304,33 @@ func (r *Raft) handleHeartbeat(m pb.Message) {
 }
 
 func (r *Raft) handleHeartbeatResponse(m pb.Message) {
+
+}
+
+// handleSnapshot handle Snapshot RPC request
+func (r *Raft) handleSnapshot(m pb.Message) {
+	// Your Code Here (2C).
+	//TODO:2C
+	r.lg.Debugf("handle snapshot")
+	meta := m.Snapshot.Metadata
+	if meta.Index <= r.RaftLog.committed {
+		r.lg.Debugf("reject snapshot")
+		return
+	}
+	r.becomeFollower(m.Term, m.From)
+
+	r.RaftLog.committed = meta.Index
+	r.RaftLog.pendingSnapshot = m.Snapshot
+	r.RaftLog.applied = meta.Index
+	r.RaftLog.stabled = meta.Index
+	r.RaftLog.entries = nil
+	r.RaftLog.firstIndex = meta.GetIndex() + 1
+
+	r.Prs = make(map[uint64]*Progress)
+	r.peerArray = make([]uint64, 0)
+	for _, id := range meta.ConfState.Nodes {
+		r.Prs[id] = &Progress{}
+		r.peerArray = append(r.peerArray, id)
+	}
 
 }

@@ -71,7 +71,6 @@ type Ready struct {
 type RawNode struct {
 	Raft *Raft
 	// Your Data Here (2A).
-	//TODO:
 	softState *SoftState
 	hardState pb.HardState
 	lg        *log.Logger
@@ -80,7 +79,7 @@ type RawNode struct {
 // NewRawNode returns a new RawNode given configuration and a list of raft peers.
 func NewRawNode(config *Config) (*RawNode, error) {
 	// Your Code Here (2A).
-	//TODO:
+
 	raft := newRaft(config)
 	model := &RawNode{
 		Raft:      raft,
@@ -88,6 +87,7 @@ func NewRawNode(config *Config) (*RawNode, error) {
 		softState: &SoftState{Lead: raft.Lead, RaftState: raft.State},
 		lg:        Newlg("RawNode"),
 	}
+	model.lg.Debugf("init a RawNode successfully")
 	return model, nil
 }
 
@@ -156,7 +156,6 @@ func (rn *RawNode) Step(m pb.Message) error {
 // Ready returns the current point-in-time state of this RawNode.
 func (rn *RawNode) Ready() Ready {
 	// Your Code Here (2A).
-	//TODO:
 
 	model := Ready{
 		HardState:        pb.HardState{Term: rn.Raft.Term, Vote: rn.Raft.Vote, Commit: rn.Raft.RaftLog.committed},
@@ -196,7 +195,6 @@ func (rn *RawNode) Ready() Ready {
 // HasReady called when RawNode user need to check if any Ready pending.
 func (rn *RawNode) HasReady() bool {
 	// Your Code Here (2A).
-	//TODO:
 
 	hard := pb.HardState{
 		Term:   rn.Raft.Term,
@@ -214,7 +212,9 @@ func (rn *RawNode) HasReady() bool {
 		return true
 	}
 
-	//TODO:snap
+	if !IsEmptySnap(rn.Raft.RaftLog.pendingSnapshot) {
+		return true
+	}
 
 	return false
 }
@@ -223,7 +223,6 @@ func (rn *RawNode) HasReady() bool {
 // last Ready results.
 func (rn *RawNode) Advance(rd Ready) {
 	// Your Code Here (2A).
-	//TODO:
 
 	if !IsEmptyHardState(rd.HardState) {
 		rn.hardState = rd.HardState
@@ -236,6 +235,9 @@ func (rn *RawNode) Advance(rd Ready) {
 	if len(rd.CommittedEntries) > 0 {
 		rn.Raft.RaftLog.applied = rd.CommittedEntries[len(rd.CommittedEntries)-1].Index
 	}
+
+	rn.Raft.RaftLog.pendingSnapshot = nil
+	rn.Raft.RaftLog.maybeCompact()
 
 }
 
