@@ -71,6 +71,9 @@ func (s *StandAloneStorage) Start() error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	s.lg.Printf("start storage")
+	if s.state == 1 {
+		return errors.New("DB has been already started")
+	}
 	s.state = 1
 	s.lg.Printf("start successfully")
 	return nil
@@ -81,6 +84,9 @@ func (s *StandAloneStorage) Stop() error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	s.lg.Printf("stop storage")
+	if s.state == 0 {
+		return errors.New("DB has been already stopped")
+	}
 	s.state = 0
 	s.lg.Printf("stop successfully")
 	return nil
