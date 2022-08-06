@@ -42,7 +42,7 @@ func (txn *MvccTxn) Writes() []storage.Modify {
 func (txn *MvccTxn) PutWrite(key []byte, ts uint64, write *Write) {
 	// Your Code Here (4A).
 	//TODO:4A
-	txn.writes := appends(txn.writes,storage.Modify{Data:storage.Put{Key:key,}})
+	txn.writes = append(txn.writes, storage.Modify{Data: write})
 }
 
 // GetLock returns a lock if key is locked. It will return (nil, nil) if there is no lock on key, and (nil, err)
@@ -57,6 +57,7 @@ func (txn *MvccTxn) GetLock(key []byte) (*Lock, error) {
 func (txn *MvccTxn) PutLock(key []byte, lock *Lock) {
 	// Your Code Here (4A).
 	//TODO:4A
+	txn.writes = append(txn.writes, storage.Modify{Data: lock})
 }
 func (txn *MvccTxn) DeleteLock(key []byte) {
 	// Your Code Here (4A).
